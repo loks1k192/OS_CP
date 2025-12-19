@@ -9,7 +9,7 @@
 #include <fcntl.h>  //file control
 #include <errno.h>
 
-/* globals (определены здесь) */
+// глобальные переменные
 char login[MAX_LOGIN];
 char my_fifo[MAX_FIFO_PATH];
 int running = 1;

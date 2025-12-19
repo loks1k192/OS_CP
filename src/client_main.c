@@ -16,13 +16,13 @@ int main()
     if (!fgets(login, sizeof(login), stdin))
         return 0;
 
-    /* trim newline */
+    // перенос на новую строку
     login[strcspn(login, "\n")] = '\0';
     if (strlen(login) == 0)
         return 0;
 
     snprintf(my_fifo, sizeof(my_fifo), "/tmp/%s.fifo", login);
-    /* remove previous fifo if any */
+    // удаляет прошлую fifo, если есть
     unlink(my_fifo);
     if (mkfifo(my_fifo, 0666) < 0)
     {
@@ -33,20 +33,18 @@ int main()
         }
     }
 
-    /* register to server */
+    // регистрация на сервере
     char cmd[1500];
     snprintf(cmd, sizeof(cmd), "REGISTER %s %s\n", login, my_fifo);
     if (send_to_server(cmd) < 0)
     {
         fprintf(stderr, "Failed to register on server. Make sure server is running.\n");
-        /* continue anyway */
     }
 
     pthread_t reader;
     if (pthread_create(&reader, NULL, reader_thread, NULL) != 0)
     {
         perror("pthread_create");
-        /* try to continue, but reader won't run */
     }
 
     printf("Commands:\n");

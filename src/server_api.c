@@ -13,9 +13,9 @@
 #include <sys/stat.h>
 #include <time.h>
 
-/* Globals (originally static in monolith) */
+/* Глобальные переменные (изначально статические в монолитной версии) */
 Client *clients = NULL;
-Message *messages = NULL; // pending + scheduled
+Message *messages = NULL; // ожидающие + запланированные сообщения
 pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 int running = 1;
@@ -58,7 +58,7 @@ void unregister_client_locked(const char *login)
 
 void push_message_locked(Message *m)
 {
-    // insert sorted by deliver_time ascending
+    // вставка с сортировкой по возрастанию времени доставки
     if (!messages || m->deliver_time < messages->deliver_time)
     {
         m->next = messages;
@@ -116,25 +116,25 @@ void try_deliver_message(Message *m)
 
     if (rcpt && rcpt->online && rcpt->fifo_path[0])
     {
-        // try to open recipient FIFO
+        // пытаемся открыть FIFO получателя
         int fd = open(rcpt->fifo_path, O_WRONLY | O_NONBLOCK);
         if (fd >= 0)
         {
             ssize_t w = write(fd, line, strlen(line));
             (void)w;
             close(fd);
-            // delivered
+            // доставлено
             free(m);
             pthread_mutex_unlock(&mtx);
             return;
         }
         else
         {
-            // cannot open (no reader) => keep message pending
-            // leave message in pending queue
+            // не удалось открыть (нет читателя) => оставляем сообщение в ожидании
+            // оставляем сообщение в очереди ожидания
         }
     }
-    // recipient offline or couldn't open FIFO -> requeue for future
+    // получатель оффлайн или не удалось открыть FIFO -> перепланируем на будущее
     push_message_locked(m);
     pthread_mutex_unlock(&mtx);
 }
@@ -145,10 +145,10 @@ void *scheduler_thread(void *arg)
     while (running)
     {
         pthread_mutex_lock(&mtx);
-        // find earliest message
+        // находим самое раннее сообщение
         if (!messages)
         {
-            // wait until new message arrives
+            // ждём, пока не появится новое сообщение
             pthread_cond_wait(&cond, &mtx);
             pthread_mutex_unlock(&mtx);
             continue;
@@ -157,17 +157,17 @@ void *scheduler_thread(void *arg)
         Message *m = messages;
         if (m->deliver_time > now)
         {
-            // timed wait until m->deliver_time or until a new message inserted
+            // ожидаем до m->deliver_time или до вставки нового сообщения
             struct timespec ts;
             ts.tv_sec = m->deliver_time;
             ts.tv_nsec = 0;
             int rc = pthread_cond_timedwait(&cond, &mtx, &ts);
             (void)rc;
-            // loop to re-evaluate
+            // возвращаемся к переоценке
             pthread_mutex_unlock(&mtx);
             continue;
         }
-        // deliver all messages whose time <= now
+        // доставляем все сообщения, время которых <= текущего
         while (messages && messages->deliver_time <= now)
         {
             Message *to_deliver = pop_earliest_locked();
@@ -183,7 +183,7 @@ void *scheduler_thread(void *arg)
 
 void deliver_pending_for_client_locked(const char *login)
 {
-    // find messages for this login, take them out and try delivering
+    // находим сообщения для этого логина, извлекаем их и пытаемся доставить
     Message *collected = NULL;
     Message *prev = NULL, *p = messages;
     while (p)
@@ -191,12 +191,12 @@ void deliver_pending_for_client_locked(const char *login)
         if (strcmp(p->to, login) == 0)
         {
             Message *next = p->next;
-            // remove p from messages
+            // удаляем p из messages
             if (prev)
                 prev->next = next;
             else
                 messages = next;
-            // push to collected list (unsorted)
+            // добавляем в collected (без сортировки)
             p->next = collected;
             collected = p;
             p = next;
@@ -208,7 +208,7 @@ void deliver_pending_for_client_locked(const char *login)
         }
     }
     pthread_mutex_unlock(&mtx);
-    // try deliver each immediately
+    // пытаемся доставить каждое немедленно
     Message *q = collected;
     while (q)
     {
@@ -221,7 +221,7 @@ void deliver_pending_for_client_locked(const char *login)
 
 void process_command(char *line)
 {
-    // Commands:
+    // Команды:
     // REGISTER <login> <fifo_path>
     // UNREGISTER <login>
     // SEND <from> <to> <delay_seconds> <message...>
@@ -234,17 +234,17 @@ void process_command(char *line)
         char *fifo = strtok(NULL, " \t\n");
         if (!login || !fifo)
         {
-            fprintf(stderr, "REGISTER requires login and fifo_path\n");
+            fprintf(stderr, "REGISTER требует логин и fifo_path\n");
             return;
         }
         pthread_mutex_lock(&mtx);
         register_client_locked(login, fifo);
-        // signal scheduler in case pending messages exist
+        // сигнализируем планировщику на случай существования ожидающих сообщений
         pthread_cond_signal(&cond);
-        // deliver any pending for this client immediately
+        // немедленно доставляем все ожидающие сообщения для этого клиента
         deliver_pending_for_client_locked(login);
         pthread_mutex_unlock(&mtx);
-        printf("Registered %s -> %s\n", login, fifo);
+        printf("Зарегистрирован %s -> %s\n", login, fifo);
     }
     else if (strcmp(cmd, "UNREGISTER") == 0)
     {
@@ -254,17 +254,17 @@ void process_command(char *line)
         pthread_mutex_lock(&mtx);
         unregister_client_locked(login);
         pthread_mutex_unlock(&mtx);
-        printf("Unregistered %s\n", login);
+        printf("Разрегистрирован %s\n", login);
     }
     else if (strcmp(cmd, "SEND") == 0)
     {
         char *from = strtok(NULL, " \t\n");
         char *to = strtok(NULL, " \t\n");
         char *delay_s = strtok(NULL, " \t\n");
-        char *rest = strtok(NULL, "\n"); // remainder = message (may contain spaces)
+        char *rest = strtok(NULL, "\n"); // остаток = сообщение (может содержать пробелы)
         if (!from || !to || !delay_s)
         {
-            fprintf(stderr, "SEND requires from to delay [message]\n");
+            fprintf(stderr, "SEND требует from to delay [message]\n");
             return;
         }
         long delay = strtol(delay_s, NULL, 10);
@@ -275,7 +275,7 @@ void process_command(char *line)
         strncpy(m->to, to, MAX_LOGIN - 1);
         if (rest)
         {
-            // rest may begin with space; trim leading spaces
+            // rest может начинаться с пробела; обрезаем начальные пробелы
             while (*rest == ' ' || *rest == '\t')
                 rest++;
             strncpy(m->text, rest, MAX_MESSAGE - 1);
@@ -287,10 +287,10 @@ void process_command(char *line)
         push_message_locked(m);
         pthread_cond_signal(&cond);
         pthread_mutex_unlock(&mtx);
-        printf("Scheduled message from %s to %s in %ld sec: \"%s\"\n", from, to, delay, m->text);
+        printf("Запланировано сообщение от %s к %s через %ld сек: \"%s\"\n", from, to, delay, m->text);
     }
     else
     {
-        fprintf(stderr, "Unknown command: %s\n", cmd);
+        fprintf(stderr, "Неизвестная команда: %s\n", cmd);
     }
 }

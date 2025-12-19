@@ -14,7 +14,7 @@ typedef struct Client
 {
     char login[MAX_LOGIN];
     char fifo_path[MAX_FIFO_PATH];
-    int online; // 1 if registered (has fifo path), 0 otherwise
+    int online;
     struct Client *next;
 } Client;
 
@@ -27,14 +27,14 @@ typedef struct Message
     struct Message *next;
 } Message;
 
-/* Globals (defined in server_api.c) */
+// Глобальные переменные
 extern Client *clients;
 extern Message *messages;
 extern pthread_mutex_t mtx;
 extern pthread_cond_t cond;
 extern int running;
 
-/* Server API */
+// Прототипы функций для server_api
 Client *find_client_locked(const char *login);
 void register_client_locked(const char *login, const char *fifo_path);
 void unregister_client_locked(const char *login);
@@ -49,4 +49,4 @@ void deliver_pending_for_client_locked(const char *login);
 
 void process_command(char *line);
 
-#endif // SERVER_H
+#endif
